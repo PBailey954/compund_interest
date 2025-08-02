@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compound Interest Calculator</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Compound Interest Calculator</h1>
+        <form id="calcForm">
+            <div class="form-group">
+                <label for="principal">Initial Investment ($)</label>
+                <input type="number" id="principal" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="monthlyContribution">Monthly Contribution ($)</label>
+                <input type="number" id="monthlyContribution" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="interestRate">Annual Interest Rate (%)</label>
+                <input type="number" id="interestRate" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="interestRange">Interest Rate Range (±%)</label>
+                <input type="number" id="interestRange" min="0" step="0.01" placeholder="Enter range (optional)">
+            </div>
+            <div class="form-group">
+                <label for="durationYears">Duration (years)</label>
+                <input type="number" id="durationYears" min="1" step="1" required>
+            </div>
+            <div class="form-group">
+                <label>Compounding Frequency</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="compounding" value="monthly" checked> Monthly</label>
+                    <label><input type="radio" name="compounding" value="yearly"> Yearly</label>
+                </div>
+            </div>
+            <button type="submit" id="calculateBtn">Calculate</button>
+        </form>
+        <div id="summary" class="summary hidden">
+            <h2 id="summaryTitle">Ending Balance: <span id="endingBalance"></span></h2>
+            <p id="rangeSummary" class="range-summary"></p>
+        </div>
+        <div id="viewToggle" class="view-toggle hidden">
+            <label for="viewSelect">View:</label>
+            <select id="viewSelect">
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+            </select>
+        </div>
+        <div id="chart-container" class="chart-container hidden">
+            <canvas id="balanceChart"></canvas>
+            <div id="hoverInfo" class="hover-info"></div>
+        </div>
+        <div id="table-container" class="table-container hidden">
+            <table id="resultsTable">
+                <thead id="tableHead"></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+    </div>
+    <!-- Chart.js library via CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
