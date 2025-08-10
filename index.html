@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Compound Interest Calculator</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="container">
         <h1>Compound Interest Calculator</h1>
@@ -31,16 +33,26 @@
                 <input type="number" id="durationYears" min="1" step="1" required>
             </div>
             <div class="form-group">
-                <label>Compounding Frequency</label>
-                <div class="radio-group">
-                    <label><input type="radio" name="compounding" value="monthly" checked> Monthly</label>
-                    <label><input type="radio" name="compounding" value="yearly"> Yearly</label>
-                </div>
+                <label for="compounding">Compounding Frequency</label>
+                <select id="compounding">
+                    <option value="daily">Daily</option>
+                    <option value="monthly" selected>Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="semiannually">Semi-Annually</option>
+                    <option value="yearly">Yearly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="displayMode">Display Mode</label>
+                <select id="displayMode">
+                    <option value="nominal" selected>Nominal</option>
+                    <option value="real">Inflation-adjusted (3%)</option>
+                </select>
             </div>
             <button type="submit" id="calculateBtn">Calculate</button>
         </form>
         <div id="summary" class="summary hidden">
-            <h2 id="summaryTitle">Ending Balance: <span id="endingBalance"></span></h2>
+            <h2 id="summaryTitle"><span id="summaryModeLabel">(Nominal)</span> Ending Balance: <span id="endingBalance"></span></h2>
             <p id="rangeSummary" class="range-summary"></p>
         </div>
         <div id="viewToggle" class="view-toggle hidden">
@@ -65,4 +77,5 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="script.js"></script>
 </body>
+
 </html>

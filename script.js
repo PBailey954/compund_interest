@@ -1,390 +1,384 @@
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('calcForm');
-    const summary = document.getElementById('summary');
-    const endingBalanceEl = document.getElementById('endingBalance');
-    const viewToggle = document.getElementById('viewToggle');
-    const viewSelect = document.getElementById('viewSelect');
-    const chartContainer = document.getElementById('chart-container');
-    const tableContainer = document.getElementById('table-container');
-    const tableHead = document.getElementById('tableHead');
-    const tableBody = document.getElementById('tableBody');
-    const hoverInfo = document.getElementById('hoverInfo');
+"use strict";
 
-    let monthlyResults = [];
-    let yearlyResults = [];
-    let currentView = 'monthly';
-    let chart;
+document.addEventListener("DOMContentLoaded", () => {
+  // --- DOM ---
+  const form = document.getElementById("calcForm");
+  const principalEl = document.getElementById("principal");
+  const monthlyContribEl = document.getElementById("monthlyContribution");
+  const rateEl = document.getElementById("interestRate");
+  const rangeEl = document.getElementById("interestRange");
+  const yearsEl = document.getElementById("durationYears");
+  const compoundingEl = document.getElementById("compounding"); // dropdown
+  const displayModeEl = document.getElementById("displayMode");
 
-    // Variables for storing results when an interest rate range is specified
-    let minMonthlyResults = [];
-    let minYearlyResults = [];
-    let maxMonthlyResults = [];
-    let maxYearlyResults = [];
-    // Store the base interest rate and range (as decimals)
-    let interestRateValue = 0;
-    let rangeValue = 0;
-    let minRateValue = 0;
-    let maxRateValue = 0;
+  const summary = document.getElementById("summary");
+  const endingBalanceEl = document.getElementById("endingBalance");
+  const summaryModeLabel = document.getElementById("summaryModeLabel");
+  const rangeSummaryEl = document.getElementById("rangeSummary");
 
-    // Handle form submission
-    form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        // Retrieve and parse input values
-        const principal = parseFloat(document.getElementById('principal').value);
-        const monthlyContribution = parseFloat(document.getElementById('monthlyContribution').value);
-        const interestRate = parseFloat(document.getElementById('interestRate').value) / 100;
-        const durationYears = parseInt(document.getElementById('durationYears').value);
-        const compounding = document.querySelector('input[name="compounding"]:checked').value;
+  const viewSelect = document.getElementById("viewSelect");
+  const chartContainer = document.getElementById("chart-container");
+  const hoverInfo = document.getElementById("hoverInfo");
+  const tableHead = document.getElementById("tableHead");
+  const tableBody = document.getElementById("tableBody");
+  const tableContainer = document.getElementById("table-container");
 
-        // Parse interest rate range (optional)
-        const interestRangeInput = document.getElementById('interestRange').value;
-        let rangePercent = parseFloat(interestRangeInput);
-        if (isNaN(rangePercent) || rangePercent < 0) {
-            rangePercent = 0;
-        }
-        // Store the base interest rate and range globally (as decimals)
-        rangeValue = rangePercent / 100;
-        interestRateValue = interestRate;
+  // --- Consts & state ---
+  const INFL = 0.03; // 3% inflation
+  let currentView = "yearly";
+  let durationYearsCache = 0;
 
-        // Validate inputs
-        if (isNaN(principal) || isNaN(monthlyContribution) || isNaN(interestRate) || isNaN(durationYears)) {
-            alert('Please fill in all fields with valid numbers.');
-            return;
-        }
-        if (durationYears <= 0) {
-            alert('Duration must be at least 1 year.');
-            return;
-        }
+  let monthlyResults = [];
+  let yearlyResults = [];
+  let minMonthlyResults = [];
+  let minYearlyResults = [];
+  let maxMonthlyResults = [];
+  let maxYearlyResults = [];
 
-        const months = durationYears * 12;
-        // Compute base results based on compounding frequency
-        if (compounding === 'monthly') {
-            monthlyResults = computeMonthly(principal, interestRate, monthlyContribution, months);
-        } else {
-            monthlyResults = computeYearly(principal, interestRate, monthlyContribution, months);
-        }
-        yearlyResults = groupByYear(monthlyResults);
+  let baseRate = 0;
+  let minRate = 0;
+  let maxRate = 0;
+  let rangeValue = 0;
 
-        // Reset range result arrays
-        minMonthlyResults = [];
-        minYearlyResults = [];
-        maxMonthlyResults = [];
-        maxYearlyResults = [];
-        minRateValue = 0;
-        maxRateValue = 0;
-        // If a range is specified, compute results for lower and higher rates
-        if (rangeValue > 0) {
-            // Determine the lower and higher interest rates (ensuring non-negative values)
-            minRateValue = Math.max(interestRate - rangeValue, 0);
-            maxRateValue = interestRate + rangeValue;
-            if (compounding === 'monthly') {
-                minMonthlyResults = computeMonthly(principal, minRateValue, monthlyContribution, months);
-                maxMonthlyResults = computeMonthly(principal, maxRateValue, monthlyContribution, months);
-            } else {
-                minMonthlyResults = computeYearly(principal, minRateValue, monthlyContribution, months);
-                maxMonthlyResults = computeYearly(principal, maxRateValue, monthlyContribution, months);
-            }
-            // Convert monthly results into yearly aggregates for the range datasets
-            minYearlyResults = groupByYear(minMonthlyResults);
-            maxYearlyResults = groupByYear(maxMonthlyResults);
-        }
+  let chart;
 
-        // Update summary with the final balance for the base rate
-        const finalBalance = monthlyResults[monthlyResults.length - 1].endBalance;
-        endingBalanceEl.textContent = '$' + finalBalance.toFixed(2);
-        summary.classList.remove('hidden');
+  // --- Helpers: compounding models ---
+  // Your original monthly/yearly functions can be kept if you had them; these are safe drop-ins.
 
-        // Update range summary text under the main summary
-        const rangeSummaryEl = document.getElementById('rangeSummary');
-        if (rangeValue > 0) {
-            const finalMin = minMonthlyResults[minMonthlyResults.length - 1].endBalance;
-            const finalMax = maxMonthlyResults[maxMonthlyResults.length - 1].endBalance;
-            rangeSummaryEl.textContent = `At ${(minRateValue*100).toFixed(2)}%: $${finalMin.toFixed(2)} | At ${(maxRateValue*100).toFixed(2)}%: $${finalMax.toFixed(2)}`;
-        } else {
-            rangeSummaryEl.textContent = '';
-        }
+  // Monthly compounding: interest each month on prior balance, then add deposit at month end
+  function computeMonthly(principal, r, mContrib, months) {
+    const out = [];
+    let bal = principal;
+    for (let m = 1; m <= months; m++) {
+      const start = bal;
+      const i = start * (r / 12);
+      bal = start + i + mContrib;
+      out.push({ period: m, startBalance: start, deposit: mContrib, interest: i, endBalance: bal });
+    }
+    return out;
+  }
 
-        // Reveal view toggle, chart and table sections
-        viewToggle.classList.remove('hidden');
-        chartContainer.classList.remove('hidden');
-        tableContainer.classList.remove('hidden');
+  // Yearly compounding: interest once per year; deposits monthly before year-end interest
+  function computeYearly(principal, r, mContrib, months) {
+    const out = [];
+    let bal = principal;
+    for (let m = 1; m <= months; m++) {
+      const start = bal;
+      // add monthly deposit
+      bal = start + mContrib;
+      let i = 0;
+      if (m % 12 === 0) {
+        i = bal * r;
+        bal += i;
+      }
+      out.push({ period: m, startBalance: start, deposit: mContrib, interest: i, endBalance: bal });
+    }
+    return out;
+  }
 
-        // Set the current view based on selector and update chart/table
-        currentView = viewSelect.value;
-        updateChart();
-        updateTable();
+  // Quarterly / Semi-Annually: interest at end of each period; deposits monthly
+  function computePeriodic(principal, r, mContrib, months, periodsPerYear) {
+    const out = [];
+    let bal = principal;
+    const monthsPerPeriod = Math.round(12 / periodsPerYear);
+    for (let m = 1; m <= months; m++) {
+      const start = bal;
+      bal = start + mContrib;
+      let i = 0;
+      if (m % monthsPerPeriod === 0) {
+        i = bal * (r / periodsPerYear);
+        bal += i;
+      }
+      out.push({ period: m, startBalance: start, deposit: mContrib, interest: i, endBalance: bal });
+    }
+    return out;
+  }
+
+  // Daily: use effective monthly factor derived from daily compounding
+  function computeDailyEffective(principal, r, mContrib, months) {
+    const out = [];
+    let bal = principal;
+    const monthlyFactor = Math.pow(1 + r / 365, 365 / 12);
+    for (let m = 1; m <= months; m++) {
+      const start = bal;
+      // deposit then interest on the month's balance
+      const preInterest = start + mContrib;
+      const end = preInterest * monthlyFactor;
+      const i = end - preInterest;
+      bal = end;
+      out.push({ period: m, startBalance: start, deposit: mContrib, interest: i, endBalance: bal });
+    }
+    return out;
+  }
+
+  // Group to yearly rows for yearly view
+  function groupByYear(monthly) {
+    const out = [];
+    const years = Math.floor(monthly.length / 12);
+    for (let y = 1; y <= years; y++) {
+      const s = (y - 1) * 12;
+      const e = y * 12 - 1;
+      const start = monthly[s].startBalance;
+      const end = monthly[e].endBalance;
+      const contribs = monthly.slice(s, e + 1).reduce((sum, r) => sum + (r.deposit || 0), 0);
+      const interest = monthly.slice(s, e + 1).reduce((sum, r) => sum + (r.interest || 0), 0);
+      out.push({ period: y, startBalance: start, contributions: contribs, interest, endBalance: end });
+    }
+    return out;
+  }
+
+  // Inflation transform (display-time only)
+  function realValue(nominal, periodIndex, isMonthly) {
+    const years = isMonthly ? periodIndex / 12 : periodIndex;
+    return nominal / Math.pow(1 + INFL, years);
+  }
+
+  // --- Submit ---
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const principal = parseFloat(principalEl.value);
+    const mContrib = parseFloat(monthlyContribEl.value);
+    const rate = parseFloat(rateEl.value) / 100;
+    const years = parseInt(yearsEl.value, 10);
+    const comp = (compoundingEl && compoundingEl.value) ? compoundingEl.value : "monthly";
+    const rangePct = rangeEl.value ? parseFloat(rangeEl.value) / 100 : 0;
+
+    if ([principal, mContrib, rate, years].some(v => isNaN(v)) || years <= 0) {
+      alert("Please fill in all fields correctly.");
+      return;
+    }
+
+    durationYearsCache = years;
+    baseRate = rate;
+    rangeValue = Math.max(0, rangePct);
+    minRate = Math.max(0, rate - rangeValue);
+    maxRate = rate + rangeValue;
+
+    const months = years * 12;
+
+    // Compute base series
+    monthlyResults = computeByCompounding(comp, principal, rate, mContrib, months);
+    yearlyResults = groupByYear(monthlyResults);
+
+    // Range series
+    minMonthlyResults = [];
+    minYearlyResults = [];
+    maxMonthlyResults = [];
+    maxYearlyResults = [];
+    if (rangeValue > 0) {
+      minMonthlyResults = computeByCompounding(comp, principal, minRate, mContrib, months);
+      maxMonthlyResults = computeByCompounding(comp, principal, maxRate, mContrib, months);
+      minYearlyResults = groupByYear(minMonthlyResults);
+      maxYearlyResults = groupByYear(maxMonthlyResults);
+    }
+
+    // Reveal UI
+    summary.classList.remove("hidden");
+    chartContainer.classList.remove("hidden");
+    tableContainer.classList.remove("hidden");
+
+    // Default to yearly view
+    currentView = viewSelect.value || "yearly";
+
+    updateSummary();
+    updateChart();
+    updateTable();
+  });
+
+  function computeByCompounding(comp, principal, rate, mContrib, months) {
+    switch (comp) {
+      case "monthly": return computeMonthly(principal, rate, mContrib, months);
+      case "yearly": return computeYearly(principal, rate, mContrib, months);
+      case "quarterly": return computePeriodic(principal, rate, mContrib, months, 4);
+      case "semiannually": return computePeriodic(principal, rate, mContrib, months, 2);
+      case "daily": return computeDailyEffective(principal, rate, mContrib, months);
+      default: return computeMonthly(principal, rate, mContrib, months);
+    }
+  }
+
+  // --- Display helpers ---
+  function isRealMode() {
+    return displayModeEl && displayModeEl.value === "real";
+  }
+
+  function capToDuration(arr, view) {
+    if (!durationYearsCache) return arr;
+    const limit = (view === "monthly") ? durationYearsCache * 12 : durationYearsCache;
+    return arr.slice(0, limit);
+  }
+
+  // --- Summary ---
+  function updateSummary() {
+    const base = yearlyResults;
+    if (!base.length) return;
+    const nominalEnd = base[base.length - 1].endBalance;
+    const years = durationYearsCache;
+
+    const finalDisplay = isRealMode() ? (nominalEnd / Math.pow(1 + INFL, years)) : nominalEnd;
+    endingBalanceEl.textContent = "$" + finalDisplay.toFixed(2);
+    if (summaryModeLabel) {
+      summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
+    }
+
+    if (rangeValue > 0 && minYearlyResults.length && maxYearlyResults.length) {
+      const minNom = minYearlyResults[minYearlyResults.length - 1].endBalance;
+      const maxNom = maxYearlyResults[maxYearlyResults.length - 1].endBalance;
+      const minDisp = isRealMode() ? (minNom / Math.pow(1 + INFL, years)) : minNom;
+      const maxDisp = isRealMode() ? (maxNom / Math.pow(1 + INFL, years)) : maxNom;
+
+      rangeSummaryEl.textContent =
+        `Range: ${(minRate * 100).toFixed(2)}% → $${minDisp.toFixed(2)} • ` +
+        `${(baseRate * 100).toFixed(2)}% → $${finalDisplay.toFixed(2)} • ` +
+        `${(maxRate * 100).toFixed(2)}% → $${maxDisp.toFixed(2)}`;
+    } else {
+      rangeSummaryEl.textContent = "";
+    }
+  }
+
+  // --- Chart ---
+  function updateChart() {
+    if (chart) chart.destroy();
+    const ctx = document.getElementById("balanceChart").getContext("2d");
+
+    const rawBaseAll = (currentView === "monthly") ? monthlyResults : yearlyResults;
+    const rawBase = capToDuration(rawBaseAll, currentView);
+    const labels = rawBase.map(i => currentView === "monthly" ? `Month ${i.period}` : `Year ${i.period}`);
+
+    const dataBase = rawBase.map(i => {
+      const nominal = i.endBalance;
+      return isRealMode() ? realValue(nominal, i.period, currentView === "monthly") : nominal;
     });
 
-    // Change view (monthly/yearly)
-    viewSelect.addEventListener('change', function() {
-        currentView = this.value;
-        updateChart();
-        updateTable();
+    const datasets = [{
+      label: `Balance ${isRealMode() ? "— Real" : ""}`,
+      data: dataBase,
+      borderColor: "#3b82f6",
+      backgroundColor: "rgba(59,130,246,.15)",
+      fill: true,
+      tension: 0.15,
+      pointRadius: 0
+    }];
+
+    if (rangeValue > 0 && minMonthlyResults.length && maxMonthlyResults.length) {
+      const lowerAll = (currentView === "monthly") ? minMonthlyResults : minYearlyResults;
+      const higherAll = (currentView === "monthly") ? maxMonthlyResults : maxYearlyResults;
+      const lower = capToDuration(lowerAll, currentView).map(i =>
+        isRealMode() ? realValue(i.endBalance, i.period, currentView === "monthly") : i.endBalance
+      );
+      const higher = capToDuration(higherAll, currentView).map(i =>
+        isRealMode() ? realValue(i.endBalance, i.period, currentView === "monthly") : i.endBalance
+      );
+      datasets.push({
+        label: `Lower (${(minRate * 100).toFixed(2)}%)`,
+        data: lower,
+        borderColor: "#22c55e",
+        fill: false,
+        tension: 0.15,
+        pointRadius: 0
+      });
+      datasets.push({
+        label: `Higher (${(maxRate * 100).toFixed(2)}%)`,
+        data: higher,
+        borderColor: "#f59e0b",
+        fill: false,
+        tension: 0.15,
+        pointRadius: 0
+      });
+    }
+
+    chart = new Chart(ctx, {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: datasets.length > 1, position: "top" },
+          tooltip: {
+            enabled: false,
+            external: ({ chart, tooltip }) => {
+              if (tooltip.opacity === 0) {
+                hoverInfo.textContent = "";
+                return;
+              }
+              const idx = tooltip.dataPoints[0].dataIndex;
+              const series = rawBase[idx];
+              if (!series) return;
+
+              const isMonthlyView = (currentView === "monthly");
+              const dispStart = isRealMode() ? realValue(series.startBalance, series.period, isMonthlyView) : series.startBalance;
+              const dispEnd = isRealMode() ? realValue(series.endBalance, series.period, isMonthlyView) : series.endBalance;
+              const dispInt = isRealMode() ? realValue(series.interest || 0, series.period, isMonthlyView) : (series.interest || 0);
+              const dispCon = isMonthlyView
+                ? (isRealMode() ? realValue(series.deposit || 0, series.period, isMonthlyView) : (series.deposit || 0))
+                : (isRealMode() ? realValue(series.contributions || 0, series.period, isMonthlyView) : (series.contributions || 0));
+
+              hoverInfo.textContent = `${labels[idx]} • Start: $${dispStart.toFixed(2)} • Contrib: $${dispCon.toFixed(2)} • Interest: $${dispInt.toFixed(2)} • End: $${dispEnd.toFixed(2)}`;
+            }
+          }
+        },
+        scales: {
+          y: {
+            ticks: { callback: v => "$" + Number(v).toLocaleString() },
+            title: { display: true, text: isRealMode() ? "Real Balance ($)" : "Balance ($)" }
+          }
+        }
+      }
     });
+  }
 
-    /**
-     * Compute results for monthly compounding.
-     * Contributions are added at the beginning of the month and interest is applied monthly.
-     */
-    function computeMonthly(principal, rate, monthlyContribution, months) {
-        const results = [];
-        let balance = principal;
-        for (let m = 1; m <= months; m++) {
-            const startBalance = balance;
-            const deposit = monthlyContribution;
-            // Deposit at the beginning of the period
-            const preInterestBalance = startBalance + deposit;
-            const interest = preInterestBalance * (rate / 12);
-            const endBalance = preInterestBalance + interest;
-            results.push({
-                period: m,
-                startBalance: startBalance,
-                deposit: deposit,
-                interest: interest,
-                endBalance: endBalance
-            });
-            balance = endBalance;
-        }
-        return results;
-    }
+  // --- Table ---
+  function updateTable() {
+    const raw = (currentView === "monthly") ? monthlyResults : yearlyResults;
+    const data = capToDuration(raw, currentView);
 
-    /**
-     * Compute results for yearly compounding.
-     * Contributions are added monthly but interest is applied only at the end of each year.
-     */
-    function computeYearly(principal, rate, monthlyContribution, months) {
-        const results = [];
-        let balance = principal;
-        for (let m = 1; m <= months; m++) {
-            const startBalance = balance;
-            const deposit = monthlyContribution;
-            let endBalance = startBalance + deposit;
-            let interest = 0;
-            // Apply interest only at the end of each year
-            if (m % 12 === 0) {
-                interest = endBalance * rate;
-                endBalance += interest;
-            }
-            results.push({
-                period: m,
-                startBalance: startBalance,
-                deposit: deposit,
-                interest: interest,
-                endBalance: endBalance
-            });
-            balance = endBalance;
-        }
-        return results;
-    }
+    // headers
+    tableHead.innerHTML = "";
+    tableBody.innerHTML = "";
+    const trh = document.createElement("tr");
+    ["Period", "Starting Balance ($)", "Contributions ($)", "Interest ($)", "Ending Balance ($)"].forEach(h => {
+      const th = document.createElement("th");
+      th.textContent = h;
+      trh.appendChild(th);
+    });
+    tableHead.appendChild(trh);
 
-    /**
-     * Aggregate monthly results into yearly results.
-     * Sums contributions and interest for each year and records start and end balances.
-     */
-    function groupByYear(monthlyResults) {
-        const yearly = [];
-        const monthsInYear = 12;
-        for (let i = 0; i < monthlyResults.length; i++) {
-            if ((i + 1) % monthsInYear === 0) {
-                const yearIndex = (i + 1) / monthsInYear;
-                const startIdx = i - (monthsInYear - 1);
-                const startBalance = monthlyResults[startIdx].startBalance;
-                let contributions = 0;
-                let interestSum = 0;
-                for (let j = startIdx; j <= i; j++) {
-                    contributions += monthlyResults[j].deposit;
-                    interestSum += monthlyResults[j].interest;
-                }
-                const endBalance = monthlyResults[i].endBalance;
-                yearly.push({
-                    period: yearIndex,
-                    startBalance: startBalance,
-                    contributions: contributions,
-                    interest: interestSum,
-                    endBalance: endBalance
-                });
-            }
-        }
-        return yearly;
-    }
+    const isMonthlyView = (currentView === "monthly");
+    data.forEach(item => {
+      const tr = document.createElement("tr");
+      const periodLabel = isMonthlyView ? item.period : item.period; // same number; label shows Month/Year in UI
+      const start = isRealMode() ? realValue(item.startBalance, item.period, isMonthlyView) : item.startBalance;
+      const end = isRealMode() ? realValue(item.endBalance, item.period, isMonthlyView) : item.endBalance;
+      const interest = isRealMode() ? realValue(item.interest || 0, item.period, isMonthlyView) : (item.interest || 0);
+      const contrib = isMonthlyView
+        ? (isRealMode() ? realValue(item.deposit || 0, item.period, isMonthlyView) : (item.deposit || 0))
+        : (isRealMode() ? realValue(item.contributions || 0, item.period, isMonthlyView) : (item.contributions || 0));
 
-    /**
-     * Render the chart using Chart.js based on the current view.
-     */
-    function updateChart() {
-        // Destroy existing chart instance to avoid duplication
-        if (chart) {
-            chart.destroy();
-        }
-        const ctx = document.getElementById('balanceChart').getContext('2d');
-        // Base data for labels (always derived from base results)
-        const baseData = currentView === 'monthly' ? monthlyResults : yearlyResults;
-        const labels = baseData.map(item => currentView === 'monthly' ? 'M' + item.period : 'Year ' + item.period);
-        // Build datasets dynamically
-        const datasets = [];
-        // Base dataset
-        datasets.push({
-            label: `Base Rate (${(interestRateValue*100).toFixed(2)}%)`,
-            data: baseData.map(item => item.endBalance),
-            fill: false,
-            borderColor: '#007BFF',
-            tension: 0.1,
-            pointRadius: 3,
-            pointHoverRadius: 6
-        });
-        // Range datasets if range specified
-        if (rangeValue > 0) {
-            const lowerData = currentView === 'monthly' ? minMonthlyResults : minYearlyResults;
-            datasets.push({
-                label: `Lower Rate (${(minRateValue*100).toFixed(2)}%)`,
-                data: lowerData.map(item => item.endBalance),
-                fill: false,
-                borderColor: '#28a745',
-                tension: 0.1,
-                pointRadius: 3,
-                pointHoverRadius: 6
-            });
-            const higherData = currentView === 'monthly' ? maxMonthlyResults : maxYearlyResults;
-            datasets.push({
-                label: `Higher Rate (${(maxRateValue*100).toFixed(2)}%)`,
-                data: higherData.map(item => item.endBalance),
-                fill: false,
-                borderColor: '#ffc107',
-                tension: 0.1,
-                pointRadius: 3,
-                pointHoverRadius: 6
-            });
-        }
-        chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        // Show legend only if more than one dataset
-                        display: datasets.length > 1,
-                        position: 'top'
-                    },
-                    tooltip: {
-                        enabled: false
-                    }
-                },
-                interaction: {
-                    intersect: false,
-                    mode: 'nearest',
-                    axis: 'x'
-                },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: currentView === 'monthly' ? 'Month' : 'Year'
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Balance ($)'
-                        },
-                        ticks: {
-                            callback: function(value) {
-                                return '$' + value.toLocaleString();
-                            }
-                        }
-                    }
-                },
-                // Custom hover handler to display detailed info
-                onHover: (event) => {
-                    const points = chart.getElementsAtEventForMode(event, 'nearest', { intersect: true }, false);
-                    if (points.length) {
-                        const point = points[0];
-                        const datasetIndex = point.datasetIndex;
-                        const idx = point.index;
-                        let info;
-                        let labelPrefix;
-                        if (datasetIndex === 0) {
-                            info = currentView === 'monthly' ? monthlyResults[idx] : yearlyResults[idx];
-                            labelPrefix = `Base Rate (${(interestRateValue*100).toFixed(2)}%)`;
-                        } else if (datasetIndex === 1 && rangeValue > 0) {
-                            info = currentView === 'monthly' ? minMonthlyResults[idx] : minYearlyResults[idx];
-                            labelPrefix = `Lower Rate (${(minRateValue*100).toFixed(2)}%)`;
-                        } else if (datasetIndex === 2 && rangeValue > 0) {
-                            info = currentView === 'monthly' ? maxMonthlyResults[idx] : maxYearlyResults[idx];
-                            labelPrefix = `Higher Rate (${(maxRateValue*100).toFixed(2)}%)`;
-                        }
-                        let contribValue;
-                        if (currentView === 'monthly') {
-                            contribValue = info.deposit;
-                        } else {
-                            contribValue = info.contributions;
-                        }
-                        hoverInfo.textContent =
-                            `${labelPrefix} | ` +
-                            (currentView === 'monthly' ? 'Month ' + info.period : 'Year ' + info.period) +
-                            ' | Start: $' + info.startBalance.toFixed(2) +
-                            ' | Contrib.: $' + contribValue.toFixed(2) +
-                            ' | Interest: $' + info.interest.toFixed(2) +
-                            ' | End: $' + info.endBalance.toFixed(2);
-                    } else {
-                        hoverInfo.textContent = '';
-                    }
-                }
-            }
-        });
-    }
+      tr.innerHTML = `
+        <td>${isMonthlyView ? `Month ${periodLabel}` : `Year ${periodLabel}`}</td>
+        <td>${start.toFixed(2)}</td>
+        <td>${contrib.toFixed(2)}</td>
+        <td>${interest.toFixed(2)}</td>
+        <td>${end.toFixed(2)}</td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  }
 
-    /**
-     * Populate the results table based on the current view.
-     */
-    function updateTable() {
-        const dataArray = currentView === 'monthly' ? monthlyResults : yearlyResults;
-        // Clear existing table contents
-        tableHead.innerHTML = '';
-        tableBody.innerHTML = '';
-        // Create header row
-        const headerRow = document.createElement('tr');
-        const headers = [
-            currentView === 'monthly' ? 'Month' : 'Year',
-            'Starting Balance ($)',
-            'Contributions ($)',
-            'Interest ($)',
-            'Ending Balance ($)'
-        ];
-        headers.forEach(text => {
-            const th = document.createElement('th');
-            th.textContent = text;
-            headerRow.appendChild(th);
-        });
-        tableHead.appendChild(headerRow);
-        // Populate rows
-        dataArray.forEach(item => {
-            const tr = document.createElement('tr');
-            // Period
-            const periodCell = document.createElement('td');
-            periodCell.textContent = item.period;
-            tr.appendChild(periodCell);
-            // Starting balance
-            const startCell = document.createElement('td');
-            startCell.textContent = item.startBalance.toFixed(2);
-            tr.appendChild(startCell);
-            // Contributions
-            const contribCell = document.createElement('td');
-            const contribValue = currentView === 'monthly' ? item.deposit : item.contributions;
-            contribCell.textContent = contribValue.toFixed(2);
-            tr.appendChild(contribCell);
-            // Interest
-            const interestCell = document.createElement('td');
-            interestCell.textContent = item.interest.toFixed(2);
-            tr.appendChild(interestCell);
-            // Ending balance
-            const endCell = document.createElement('td');
-            endCell.textContent = item.endBalance.toFixed(2);
-            tr.appendChild(endCell);
-            tableBody.appendChild(tr);
-        });
-    }
+  // --- Listeners ---
+  viewSelect.addEventListener("change", () => {
+    currentView = viewSelect.value;
+    updateSummary();
+    updateChart();
+    updateTable();
+  });
+
+  if (displayModeEl) {
+    displayModeEl.addEventListener("change", () => {
+      if (summaryModeLabel) summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
+      updateSummary();
+      updateChart();
+      updateTable();
+    });
+  }
 });
