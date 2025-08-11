@@ -1,161 +1,117 @@
-/* Base styles */
-* {
-    box-sizing: border-box;
+/* Modern dark theme */
+:root{
+  --bg:#0b1020;
+  --panel:#0f172a;
+  --panel-2:#0b1224;
+  --muted:#94a3b8;
+  --text:#e5e7eb;
+  --accent:#60a5fa;
+  --accent-2:#22c55e;
+  --warn:#f59e0b;
+  --ring: 0 0 0 3px rgba(96,165,250,.35);
 }
 
-body {
-    font-family: 'Segoe UI', Tahoma, sans-serif;
-    background-color: #f7f9fc;
-    color: #333;
-    margin: 0;
-    padding: 0;
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 600px at -10% -10%, rgba(96,165,250,.15), transparent 60%),
+    radial-gradient(800px 500px at 110% 10%, rgba(34,197,94,.10), transparent 60%),
+    radial-gradient(900px 700px at 50% 120%, rgba(245,158,11,.10), transparent 60%),
+    var(--bg);
 }
 
-.container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 20px;
+.wrap{max-width:1200px;margin:0 auto;padding:24px}
+.header{
+  display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;
+}
+.title h1{margin:0;font-size:clamp(22px,2.2vw,30px);font-weight:700;letter-spacing:-.01em}
+.title .tag{margin:4px 0 0;color:var(--muted);font-size:12px}
+.badge{
+  background:linear-gradient(135deg,#1f2937,#0b1224);
+  border:1px solid #1e293b;
+  color:#cbd5e1;
+  padding:6px 10px;border-radius:999px;font-size:12px;
 }
 
-h1 {
-    text-align: center;
-    margin-bottom: 20px;
+.grid{display:grid;grid-template-columns:1fr;gap:16px}
+@media (min-width: 980px){.grid{grid-template-columns: 420px 1fr}}
+
+.card{
+  background:linear-gradient(180deg, var(--panel), var(--panel-2));
+  border:1px solid #1e293b;
+  border-radius:18px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
 }
 
-/* Form styles */
-.form-group {
-    margin-bottom: 15px;
-    display: flex;
-    flex-direction: column;
-}
+.form-card{padding:18px}
+.viz-card{padding:18px}
 
-.form-group label {
-    margin-bottom: 5px;
-    font-weight: 500;
-}
+.grid-2{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+@media (min-width:640px){.grid-2{grid-template-columns: minmax(0,1fr) minmax(0,1fr)}}
 
-.form-group input {
-    padding: 8px 10px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    font-size: 16px;
+.form-group{display:flex;flex-direction:column;gap:6px}
+label{font-size:13px;color:#cbd5e1}
+input, select{width:100%;max-width:100%;
+  background:#0a1224;
+  border:1px solid #1f2a44;
+  color:var(--text);
+  padding:10px 12px;border-radius:12px;font-size:14px;
+  outline:none;transition:.2s border-color, .2s box-shadow, .2s transform;
 }
+input:focus, select:focus{border-color:#2b3b66; box-shadow: var(--ring)}
 
-.radio-group {
-    display: flex;
-    gap: 20px;
+#calculateBtn{
+  margin-top:8px;width:100%;padding:12px 16px;border:0;
+  border-radius:14px;background:linear-gradient(135deg,#60a5fa,#2563eb);
+  color:#fff;font-weight:700;letter-spacing:.2px;cursor:pointer;
+  box-shadow: 0 8px 24px rgba(37,99,235,.35);
+  transition: transform .05s ease, filter .2s ease;
 }
+#calculateBtn:hover{filter:brightness(1.05)}
+#calculateBtn:active{transform:translateY(1px)}
 
-.radio-group label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-weight: 500;
-}
+.summary{margin-top:6px;text-align:left}
+.end-title{margin:.25rem 0 .25rem;font-size:clamp(18px,2.2vw,24px);font-weight:700}
+.end-title .mode{color:var(--muted);font-weight:600;margin-right:.25rem}
+.end-title .amount{color:#e2e8f0}
+.range-summary{margin:4px 0 0;color:#aab4c6;font-size:13px}
 
-button#calculateBtn {
-    background-color: #007BFF;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    font-size: 16px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.3s ease;
-    width: 100%;
-    margin-top: 10px;
-}
+.view-toggle{display:flex;align-items:center;gap:10px;margin-top:12px}
+.view-toggle label{font-size:12px;color:#cbd5e1}
+.view-toggle select{max-width:140px}
 
-button#calculateBtn:hover {
-    background-color: #0056b3;
-}
+.chart-container{margin-top:14px;position:relative}
+.hover-info{min-height:22px;margin-top:8px;font-size:12px;color:#b9c1d2}
 
-/* Summary styles */
-.summary {
-    margin-top: 20px;
-    text-align: center;
-}
-
-.summary h2 {
-    font-size: 28px;
-    color: #007BFF;
-    margin-bottom: 0;
-}
-
-/* View toggle styles */
-.view-toggle {
-    margin-top: 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.view-toggle label {
-    font-weight: 500;
-}
-
-.view-toggle select {
-    padding: 6px 10px;
-    font-size: 16px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-}
-
-/* Chart container */
-.chart-container {
-    margin-top: 30px;
-    position: relative;
-}
-
-.hover-info {
-    margin-top: 10px;
-    font-size: 14px;
-    color: #555;
-    min-height: 20px;
-}
-
-/* Table styles */
 .table-container {
-    margin-top: 30px;
-    overflow-x: auto;
+  margin-top: 16px;
+  overflow-y: auto;
+  /* vertical scroll */
+  max-height: 300px;
+  /* adjust height as needed */
 }
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{
+  background:#0d1a34;color:#cfe1ff;
+  text-align:left;padding:10px;border-bottom:1px solid #1f2a44;font-weight:600;
+}
+tbody td{padding:10px;border-bottom:1px solid #17223a;color:#dde7ff}
+tbody tr:nth-child(odd){background:rgba(255,255,255,.02)}
 
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+.footer{margin-top:18px;color:var(--muted);font-size:12px;text-align:center;}
 
-thead {
-    background-color: #007BFF;
-    color: white;
-}
+.hidden{display:none}
 
-thead th {
-    padding: 8px;
-    text-align: left;
-    font-weight: normal;
-}
+/* --- Overflow fixes --- */
+.card{overflow:hidden}
+.form-card,.viz-card{min-width:0} /* allow grid to shrink content properly */
 
-tbody tr:nth-child(even) {
-    background-color: #f2f2f2;
-}
+/* --- Chart sizing & stretch fix --- */
+.chart-container{width:100%;max-width:100%;height:380px;overflow:hidden}
+#balanceChart{display:block;width:100% !important;height:100% !important}
 
-tbody td {
-    padding: 8px;
-    border-bottom: 1px solid #ddd;
-}
-
-.hidden {
-    display: none;
-}
-
-/* Range summary text under the main summary */
-.range-summary {
-    font-size: 16px;
-    color: #555;
-    margin-top: 5px;
-}
-
-.range-summary span {
-    font-weight: 600;
-}
+#calculateBtn{will-change: transform}

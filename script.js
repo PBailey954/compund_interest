@@ -1,6 +1,46 @@
+/* global Chart */
 "use strict";
 
 document.addEventListener("DOMContentLoaded", () => {
+  // --- Version badge ---
+  (function(){
+    try {
+      const badge = document.getElementById("versionBadge");
+      if (!badge) return;
+      const selfScript = Array.from(document.scripts).find(s => s.src && s.src.includes("script.js"));
+      let label = "";
+      if (selfScript) {
+        const url = new URL(selfScript.src, window.location.href);
+        const v = url.searchParams.get("v");
+        if (v) label = `v${v}`;
+      }
+      badge.textContent = label || "v1";
+    } catch(_) { /* no-op */ }
+  })();
+  // --- Ensure Chart.js scales/elements are registered (for UMD v3/v4) ---
+  if (window.Chart && typeof window.Chart.register === "function") {
+    const {
+      CategoryScale,
+      LinearScale,
+      PointElement,
+      LineElement,
+      Filler,
+      Tooltip,
+      Legend,
+    } = window.Chart;
+    try {
+      window.Chart.register(
+        CategoryScale,
+        LinearScale,
+        PointElement,
+        LineElement,
+        Filler,
+        Tooltip,
+        Legend
+      );
+    } catch (_) { /* already registered */ }
+  }
+
   // --- DOM ---
   const form = document.getElementById("calcForm");
   const principalEl = document.getElementById("principal");
@@ -8,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const rateEl = document.getElementById("interestRate");
   const rangeEl = document.getElementById("interestRange");
   const yearsEl = document.getElementById("durationYears");
-  const compoundingEl = document.getElementById("compounding"); // dropdown
+  const compoundingEl = document.getElementById("compounding");
   const displayModeEl = document.getElementById("displayMode");
 
   const summary = document.getElementById("summary");
@@ -16,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const summaryModeLabel = document.getElementById("summaryModeLabel");
   const rangeSummaryEl = document.getElementById("rangeSummary");
 
+  const viewToggle = document.getElementById("viewToggle");
   const viewSelect = document.getElementById("viewSelect");
   const chartContainer = document.getElementById("chart-container");
   const hoverInfo = document.getElementById("hoverInfo");
@@ -42,8 +83,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let chart;
 
-  // --- Helpers: compounding models ---
-  // Your original monthly/yearly functions can be kept if you had them; these are safe drop-ins.
+  // --- Compounding engines ---
 
   // Monthly compounding: interest each month on prior balance, then add deposit at month end
   function computeMonthly(principal, r, mContrib, months) {
@@ -64,7 +104,6 @@ document.addEventListener("DOMContentLoaded", () => {
     let bal = principal;
     for (let m = 1; m <= months; m++) {
       const start = bal;
-      // add monthly deposit
       bal = start + mContrib;
       let i = 0;
       if (m % 12 === 0) {
@@ -94,14 +133,13 @@ document.addEventListener("DOMContentLoaded", () => {
     return out;
   }
 
-  // Daily: use effective monthly factor derived from daily compounding
+  // Daily: approximate via effective monthly factor derived from daily compounding
   function computeDailyEffective(principal, r, mContrib, months) {
     const out = [];
     let bal = principal;
     const monthlyFactor = Math.pow(1 + r / 365, 365 / 12);
     for (let m = 1; m <= months; m++) {
       const start = bal;
-      // deposit then interest on the month's balance
       const preInterest = start + mContrib;
       const end = preInterest * monthlyFactor;
       const i = end - preInterest;
@@ -109,6 +147,17 @@ document.addEventListener("DOMContentLoaded", () => {
       out.push({ period: m, startBalance: start, deposit: mContrib, interest: i, endBalance: bal });
     }
     return out;
+  }
+
+  function computeByCompounding(comp, principal, rate, mContrib, months) {
+    switch (comp) {
+      case "monthly": return computeMonthly(principal, rate, mContrib, months);
+      case "yearly": return computeYearly(principal, rate, mContrib, months);
+      case "quarterly": return computePeriodic(principal, rate, mContrib, months, 4);
+      case "semiannually": return computePeriodic(principal, rate, mContrib, months, 2);
+      case "daily": return computeDailyEffective(principal, rate, mContrib, months);
+      default: return computeMonthly(principal, rate, mContrib, months);
+    }
   }
 
   // Group to yearly rows for yearly view
@@ -130,7 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Inflation transform (display-time only)
   function realValue(nominal, periodIndex, isMonthly) {
     const years = isMonthly ? periodIndex / 12 : periodIndex;
-    return nominal / Math.pow(1 + INFL, years);
+    return nominal / Math.pow(1 + 0.03, years);
   }
 
   // --- Submit ---
@@ -158,8 +207,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const months = years * 12;
 
     // Compute base series
-    monthlyResults = computeByCompounding(comp, principal, rate, mContrib, months);
-    yearlyResults = groupByYear(monthlyResults);
+    const monthlyResultsAll = computeByCompounding(comp, principal, rate, mContrib, months);
+    monthlyResults = monthlyResultsAll;
+    yearlyResults = groupByYear(monthlyResultsAll);
 
     // Range series
     minMonthlyResults = [];
@@ -175,8 +225,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Reveal UI
     summary.classList.remove("hidden");
+    const vb = document.getElementById("versionBadge"); if (vb) vb.style.display = "inline-block";
     chartContainer.classList.remove("hidden");
     tableContainer.classList.remove("hidden");
+    viewToggle.classList.remove("hidden");
 
     // Default to yearly view
     currentView = viewSelect.value || "yearly";
@@ -185,17 +237,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateChart();
     updateTable();
   });
-
-  function computeByCompounding(comp, principal, rate, mContrib, months) {
-    switch (comp) {
-      case "monthly": return computeMonthly(principal, rate, mContrib, months);
-      case "yearly": return computeYearly(principal, rate, mContrib, months);
-      case "quarterly": return computePeriodic(principal, rate, mContrib, months, 4);
-      case "semiannually": return computePeriodic(principal, rate, mContrib, months, 2);
-      case "daily": return computeDailyEffective(principal, rate, mContrib, months);
-      default: return computeMonthly(principal, rate, mContrib, months);
-    }
-  }
 
   // --- Display helpers ---
   function isRealMode() {
@@ -215,17 +256,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const nominalEnd = base[base.length - 1].endBalance;
     const years = durationYearsCache;
 
-    const finalDisplay = isRealMode() ? (nominalEnd / Math.pow(1 + INFL, years)) : nominalEnd;
+    const finalDisplay = isRealMode() ? (nominalEnd / Math.pow(1 + 0.03, years)) : nominalEnd;
     endingBalanceEl.textContent = "$" + finalDisplay.toFixed(2);
-    if (summaryModeLabel) {
-      summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
-    }
+    summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
 
     if (rangeValue > 0 && minYearlyResults.length && maxYearlyResults.length) {
       const minNom = minYearlyResults[minYearlyResults.length - 1].endBalance;
       const maxNom = maxYearlyResults[maxYearlyResults.length - 1].endBalance;
-      const minDisp = isRealMode() ? (minNom / Math.pow(1 + INFL, years)) : minNom;
-      const maxDisp = isRealMode() ? (maxNom / Math.pow(1 + INFL, years)) : maxNom;
+      const minDisp = isRealMode() ? (minNom / Math.pow(1 + 0.03, years)) : minNom;
+      const maxDisp = isRealMode() ? (maxNom / Math.pow(1 + 0.03, years)) : maxNom;
 
       rangeSummaryEl.textContent =
         `Range: ${(minRate * 100).toFixed(2)}% → $${minDisp.toFixed(2)} • ` +
@@ -253,10 +292,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const datasets = [{
       label: `Balance ${isRealMode() ? "— Real" : ""}`,
       data: dataBase,
-      borderColor: "#3b82f6",
-      backgroundColor: "rgba(59,130,246,.15)",
+      borderColor: "#60a5fa",
+      backgroundColor: "rgba(96,165,250,.15)",
       fill: true,
-      tension: 0.15,
+      tension: 0.18,
       pointRadius: 0
     }];
 
@@ -274,7 +313,7 @@ document.addEventListener("DOMContentLoaded", () => {
         data: lower,
         borderColor: "#22c55e",
         fill: false,
-        tension: 0.15,
+        tension: 0.18,
         pointRadius: 0
       });
       datasets.push({
@@ -282,7 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
         data: higher,
         borderColor: "#f59e0b",
         fill: false,
-        tension: 0.15,
+        tension: 0.18,
         pointRadius: 0
       });
     }
@@ -292,16 +331,17 @@ document.addEventListener("DOMContentLoaded", () => {
       data: { labels, datasets },
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: {
-          legend: { display: datasets.length > 1, position: "top" },
+          legend: { display: datasets.length > 1, position: "top", labels: { boxWidth: 12 } },
           tooltip: {
             enabled: false,
-            external: ({ chart, tooltip }) => {
-              if (tooltip.opacity === 0) {
+            external: ({ tooltip }) => {
+              if (!tooltip || tooltip.opacity === 0) {
                 hoverInfo.textContent = "";
                 return;
               }
-              const idx = tooltip.dataPoints[0].dataIndex;
+              const idx = tooltip.dataPoints?.[0]?.dataIndex ?? 0;
               const series = rawBase[idx];
               if (!series) return;
 
@@ -346,7 +386,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const isMonthlyView = (currentView === "monthly");
     data.forEach(item => {
       const tr = document.createElement("tr");
-      const periodLabel = isMonthlyView ? item.period : item.period; // same number; label shows Month/Year in UI
       const start = isRealMode() ? realValue(item.startBalance, item.period, isMonthlyView) : item.startBalance;
       const end = isRealMode() ? realValue(item.endBalance, item.period, isMonthlyView) : item.endBalance;
       const interest = isRealMode() ? realValue(item.interest || 0, item.period, isMonthlyView) : (item.interest || 0);
@@ -355,7 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
         : (isRealMode() ? realValue(item.contributions || 0, item.period, isMonthlyView) : (item.contributions || 0));
 
       tr.innerHTML = `
-        <td>${isMonthlyView ? `Month ${periodLabel}` : `Year ${periodLabel}`}</td>
+        <td>${isMonthlyView ? `Month ${item.period}` : `Year ${item.period}`}</td>
         <td>${start.toFixed(2)}</td>
         <td>${contrib.toFixed(2)}</td>
         <td>${interest.toFixed(2)}</td>
@@ -375,10 +414,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (displayModeEl) {
     displayModeEl.addEventListener("change", () => {
-      if (summaryModeLabel) summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
+      summaryModeLabel.textContent = isRealMode() ? "(Inflation-adjusted, 3%)" : "(Nominal)";
       updateSummary();
       updateChart();
       updateTable();
     });
   }
+
 });
